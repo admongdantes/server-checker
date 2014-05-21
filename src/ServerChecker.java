@@ -1,20 +1,23 @@
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.text.SimpleDateFormat;
-import java.util.Calendar;
+import java.util.Date;
 
 
 public class ServerChecker {
 
 	private int totalCnt = 0;
 	private int checkErrorCount = 3;
-	private int checkErrorTerm = 5000;
+	private int checkErrorTerm = 300000;
 	private String checkUrl;
-	private final String LOG_FILE_NAME = "server_checker.log";
-	private Calendar cal = Calendar.getInstance();
-	private SimpleDateFormat sdf = new SimpleDateFormat("");
+	private final String LOG_FILE_NAME = "/root/server_checker.log";
+	private SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm");
+	private String serverStartCmd = "";
+	private String serverStopCmd = "";
 	
 	public ServerChecker() {
 		//checkUrl();
@@ -31,7 +34,7 @@ public class ServerChecker {
 			conn.connect();
 			int result = conn.getResponseCode();
 			System.out.println("result : " + result);
-			
+			logToFile("resultCode - "+result + " - errorCount : "+ totalCnt);
 			if(result != 200) {
 				totalCnt++;
 			} else {
@@ -43,12 +46,12 @@ public class ServerChecker {
 		}
 	}
 	
-	private void startUrlCheck() {
+	private void startUrlCheck() throws Exception {
 		while(true) {
 			try{
 				Thread.sleep(checkErrorTerm);
 				checkUrl();
-				logToFile("");
+				
 				if(totalCnt > checkErrorCount) {
 					stop();
 					break;
@@ -61,25 +64,47 @@ public class ServerChecker {
 	}
 	
 	private void logToFile(String msg) throws Exception {
-		File f = new File("/Users/sayit/a.txt");
+		File f = new File(LOG_FILE_NAME);
+		String date = sdf.format(new Date());
 		FileOutputStream fos = new FileOutputStream(f, true);
-		msg = msg + cal.toString();
+		msg = date + " : "+msg + "\n";
 		fos.write(msg.getBytes());
 		fos.close();
 	}
-	private void stop() {
+	private void stop() throws Exception {
 		System.out.println("stop");
+		BufferedReader br = new BufferedReader(new InputStreamReader(Runtime.getRuntime().exec(serverStopCmd).getInputStream()));
+		
+		while(true) {
+			String line = br.readLine();
+			if(line == null) {
+				break;
+			}
+			logToFile(line);
+		}
+		br.close();
+		logToFile("server stop");
+		
+		Thread.sleep(5000);
 		start();
 	}
 
-	private void start() {
+	private void start() throws Exception {
 		System.out.println("start");
 		totalCnt = 0;
+		BufferedReader br = new BufferedReader(new InputStreamReader(Runtime.getRuntime().exec(serverStartCmd).getInputStream()));
 		
+		while(true) {
+			String line = br.readLine();
+			if(line == null) {
+				break;
+			}
+			logToFile(line);
+		}
+		br.close();
+		logToFile("server start");
 		startUrlCheck();
-	}
-
-	
+	}	
 	
 	/**
 	 * @param args
@@ -87,7 +112,14 @@ public class ServerChecker {
 	public static void main(String[] args) {
 		ServerChecker c = new ServerChecker();
 		c.setCheckUrl("http://122.199.152.200:8181/login.do");
-		c.startUrlCheck();
+		c.setServerStartCmd("sh /webapps/tomcat/bin/startup.sh");
+		c.setServerStopCmd("sh /webapps/tomcat/bin/shutdown.sh");
+		
+		try{
+			c.startUrlCheck();
+		}catch(Exception e) {
+			e.printStackTrace();
+		}
 	}
 
 
@@ -139,6 +171,19 @@ public class ServerChecker {
 		return this.checkErrorTerm;
 	}
 	
+	private void setServerStartCmd(String cmd) {
+		this.serverStartCmd = cmd;
+	}
 	
-
+	private void setServerStopCmd(String cmd) {
+		this.serverStopCmd = cmd;
+	}
+	
+	private String getServerStartCmd() {
+		return this.serverStartCmd;
+	}
+	
+	private String getServerStopCmd() {
+		return this.serverStopCmd;
+	}
 }
